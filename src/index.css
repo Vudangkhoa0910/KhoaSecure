@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  font-family: 'Courier New', Courier, monospace;
+  background-color: #000;
+  color: #00FF41;
+  background: linear-gradient(135deg, #000000 0%, #222222 50%, #000000 100%);
+}
+
+textarea, input {
+  background: #333;
+  border: 1px solid #555;
+  color: #00FF41;
+}
+
+textarea:focus, input:focus {
+  outline: none;
+  box-shadow: 0 0 10px #00FF41, 0 0 20px #00FF41;
+}

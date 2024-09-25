@@ -3,7 +3,7 @@ import CryptoJS from "crypto-js";
 import { db, storage } from "../firebase"; // Firebase imports
 import { doc, setDoc } from "firebase/firestore"; // Firestore methods
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage"; // Storage methods
-import { Analytics } from "@vercel/analytics/react"
+import { Link } from "react-router-dom";
 
 const Home = () => {
   const [file, setFile] = useState(null);
@@ -203,6 +203,11 @@ const Home = () => {
           </div>
         </div>
       )}
+      <Link to="/stored">
+      <button className="p-2 bg-teal-500 text-white rounded hover:bg-teal-600 mt-4">
+        Quản lý lưu trữ bảo mật
+      </button>
+    </Link>
     </div>
   );
 };

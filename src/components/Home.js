@@ -3,6 +3,7 @@ import CryptoJS from "crypto-js";
 import { db, storage } from "../firebase"; // Firebase imports
 import { doc, setDoc } from "firebase/firestore"; // Firestore methods
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage"; // Storage methods
+import { Analytics } from "@vercel/analytics/react"
 
 const Home = () => {
   const [file, setFile] = useState(null);

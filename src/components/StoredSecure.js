@@ -130,6 +130,7 @@ const StoredSecure = () => {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-r from-black to-teal-900 text-green-400">
+        <h1 className="text-5xl font-bold mb-6"><strong>Khoa Secure</strong></h1>
       {!isLoggedIn ? (
         <div className="bg-gray-800 p-4 rounded">
           <h2 className="text-xl">Login</h2>

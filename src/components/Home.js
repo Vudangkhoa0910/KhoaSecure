@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import CryptoJS from "crypto-js";
-import { db, storage } from "../firebase"; // Firebase imports
-import { doc, setDoc } from "firebase/firestore"; // Firestore methods
+import { storage } from "../firebase"; // Firebase imports
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage"; // Storage methods
 import { Link } from "react-router-dom";
 
@@ -14,7 +13,7 @@ const Home = () => {
   const [outputFormat, setOutputFormat] = useState("none");
   const [downloadURL, setDownloadURL] = useState(""); // State for the download link
 
-  // Utility to handle file uploads to Firebase
+  // Utility to handle file uploads to Firebase Storage
   const uploadToFirebase = async (fileData, folder, fileName) => {
     const storageRef = ref(storage, `${folder}/${fileName}`);
     await uploadBytes(storageRef, fileData);
@@ -28,7 +27,7 @@ const Home = () => {
     setFile(selectedFile);
 
     if (selectedFile) {
-      // Upload original file to Firebase in 'uploads/originals/'
+      // Upload original file to Firebase Storage in 'uploads/originals/'
       await uploadToFirebase(selectedFile, 'uploads/originals', selectedFile.name);
     }
   };
@@ -42,29 +41,17 @@ const Home = () => {
         setEncryptedFile(encrypted);
         alert("File mã hóa thành công!");
 
-        // Convert encrypted data to a Blob for uploading
+        // Convert encrypted data to a Blob for uploading to Firebase Storage
         const encryptedBlob = new Blob([encrypted], { type: 'text/plain' });
 
-        // Save encrypted file to Firebase in 'uploads/encryption/'
+        // Save encrypted file to Firebase Storage in 'uploads/encryption/'
         const url = await uploadToFirebase(encryptedBlob, 'uploads/encryption', `${file.name}.encrypted`);
         setDownloadURL(url); // Set the download link
-
-        // Save encrypted file details to Firestore
-        await saveEncryptedFile(encrypted);
       };
       reader.readAsDataURL(file);
     } else {
       alert("Vui lòng tải lên file và nhập khóa mã hóa.");
     }
-  };
-
-  const saveEncryptedFile = async (encrypted) => {
-    const docRef = doc(db, "encryptedFiles", "myEncryptedFile"); // Create a new document
-    await setDoc(docRef, {
-      fileData: encrypted,
-      timestamp: new Date().toISOString()
-    });
-    alert("File đã mã hóa được lưu vào System của bạn!");
   };
 
   const handleDecrypt = () => {
@@ -74,7 +61,7 @@ const Home = () => {
       setDecryptedFile(originalData);
       alert("Giải mã thành công!");
 
-      // Upload decrypted file to Firebase in 'uploads/decryption/'
+      // Upload decrypted file to Firebase Storage in 'uploads/decryption/'
       const decryptedBlob = new Blob([originalData], { type: 'text/plain' });
       uploadToFirebase(decryptedBlob, 'uploads/decryption', `${file.name}.decrypted`);
     } else {

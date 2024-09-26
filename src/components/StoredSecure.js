@@ -50,9 +50,9 @@ const StoredSecure = () => {
         const fileData = event.target.result;
         const encryptedData = CryptoJS.AES.encrypt(fileData, encryptionKey).toString();
 
-        // Store both the encrypted file and the original file
-        const encryptedStorageRef = ref(storage, `StoredSecure/${auth.currentUser.uid}/encrypted/${uuidv4()}-${file.name}`);
-        const originalStorageRef = ref(storage, `StoredSecure/${auth.currentUser.uid}/original/${uuidv4()}-${file.name}`);
+        const fileName = `${uuidv4()}-${file.name}`;
+        const encryptedStorageRef = ref(storage, `StoredSecure/${auth.currentUser.uid}/encrypted/${fileName}`);
+        const originalStorageRef = ref(storage, `StoredSecure/${auth.currentUser.uid}/original/${fileName}`);
         
         // Upload the encrypted data
         const encryptedBlob = new Blob([encryptedData], { type: "text/plain" });
@@ -60,6 +60,12 @@ const StoredSecure = () => {
         
         // Upload the original file
         await uploadBytes(originalStorageRef, file);
+
+        // Store the correct file path in userFiles
+        setUserFiles((prevFiles) => [
+          ...prevFiles,
+          { name: fileName, originalPath: originalStorageRef.fullPath }
+        ]);
 
         alert("File uploaded successfully!");
         loadUserFiles(); // Refresh the file list after upload
@@ -79,9 +85,7 @@ const StoredSecure = () => {
       const files = await Promise.all(
         fileList.items.map(async (item) => {
           const url = await getDownloadURL(item);
-          const originalFileName = item.name.replace(/^.*?-(.*)$/, "$1"); // Extract the original file name
-          const originalFilePath = `StoredSecure/${auth.currentUser.uid}/original/${originalFileName}`;
-          return { name: item.name, url, originalPath: originalFilePath }; // Store the original path
+          return { name: item.name, url, originalPath: `StoredSecure/${auth.currentUser.uid}/original/${item.name}` }; // Ensure correct originalPath
         })
       );
       setUserFiles(files);

@@ -1,4 +1,3 @@
-/* Các lớp CSS hiện có từ cấu hình ban đầu */
 .App {
   text-align: center;
 }
@@ -83,7 +82,6 @@ h1 {
 }
 
 .App-logo {
-  animation: App-logo-spin infinite 10s linear; /* Giữ lại hiệu ứng logo quay */
+  animation: App-logo-spin infinite 10s linear; 
 }
 
-/* Các lớp khác có thể tuỳ chỉnh thêm nếu cần */

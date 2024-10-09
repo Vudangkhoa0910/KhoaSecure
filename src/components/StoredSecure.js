@@ -93,8 +93,9 @@ const StoredSecure = () => {
     }
   };
 
-  const handleAccessFiles = () => {
+  const handleAccessFiles = async () => {
     if (filePassword === password) {
+      await loadUserFiles(); // Load user files after password validation
       setAccessFiles(userFiles);
     } else {
       alert("Incorrect password!");
@@ -128,73 +129,127 @@ const StoredSecure = () => {
     })); // Update the specific key for the file
   };
 
+  const handleSignOut = () => {
+    if (window.confirm("Are you sure you want to sign out?")) {
+      signOut(auth)
+        .then(() => {
+          setIsLoggedIn(false);
+          alert("Signed out successfully!");
+        })
+        .catch((error) => {
+          alert("Sign out failed: " + error.message);
+        });
+    }
+  };
+
+  // Handle drag & drop
+  const handleDragOver = (event) => {
+    event.preventDefault();
+  };
+
+  const handleDrop = (event) => {
+    event.preventDefault();
+    const droppedFile = event.dataTransfer.files[0];
+    setFile(droppedFile); // Update the file state with the dropped file
+  };
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-r from-black to-teal-900 text-green-400">
-        <h1 className="text-5xl font-bold mb-6"><strong>Khoa Secure</strong></h1>
-      {!isLoggedIn ? (
-        <div className="bg-gray-800 p-4 rounded">
-          <h2 className="text-xl">Login</h2>
-          <input type="email" placeholder="Email" onChange={(e) => setEmail(e.target.value)} className="mb-2 p-2 rounded" />
-          <input type="password" placeholder="Password" onChange={(e) => setPassword(e.target.value)} className="mb-2 p-2 rounded" />
-          <button onClick={handleLogin} className="bg-green-500 text-white rounded p-2">Login</button>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-r from-gray-900 to-purple-800 text-white p-0 m-0">
+      <h1 className="text-5xl font-extrabold mb-8">Khoa Secure</h1>
+      <div className="bg-white text-gray-800 p-6 rounded-t-lg shadow-lg w-full max-w-md flex flex-col">
+        {!isLoggedIn ? (
+          <>
+            <h2 className="text-2xl font-bold mb-4 text-center">Login</h2>
+            <input 
+              type="email" 
+              placeholder="Email" 
+              onChange={(e) => setEmail(e.target.value)} 
+              className="mb-3 p-2 border rounded w-full"
+            />
+            <input 
+              type="password" 
+              placeholder="Password" 
+              onChange={(e) => setPassword(e.target.value)} 
+              className="mb-4 p-2 border rounded w-full" 
+            />
+            <button onClick={handleLogin} className="bg-blue-600 text-white rounded p-2 w-full hover:bg-blue-700">Login</button>
 
-          <h2 className="text-xl mt-4">Sign Up</h2>
-          <input type="password" placeholder="Password" onChange={(e) => setPassword(e.target.value)} className="mb-2 p-2 rounded" />
-          <input type="password" placeholder="Confirm Password" onChange={(e) => setConfirmPassword(e.target.value)} className="mb-2 p-2 rounded" />
-          <button onClick={handleSignUp} className="bg-blue-500 text-white rounded p-2">Sign Up</button>
-        </div>
-      ) : (
-        <div className="bg-gray-800 p-4 rounded">
-          <h2 className="text-xl">Secure Storage</h2>
-          <input
-            type="file"
-            onChange={(e) => setFile(e.target.files[0])}
-            className="mb-2"
-          />
-          <input
-            type="password"
-            placeholder="Enter encryption key"
-            value={encryptionKey}
-            onChange={(e) => setEncryptionKey(e.target.value)}
-            className="mb-2 p-2 rounded"
-          />
-          <button onClick={handleFileUpload} className="bg-green-500 text-white rounded p-2">Upload</button>
+            <h2 className="text-2xl font-bold mb-4 mt-6 text-center">Sign Up</h2>
+            <input 
+              type="password" 
+              placeholder="Password" 
+              onChange={(e) => setPassword(e.target.value)} 
+              className="mb-3 p-2 border rounded w-full" 
+            />
+            <input 
+              type="password" 
+              placeholder="Confirm Password" 
+              onChange={(e) => setConfirmPassword(e.target.value)} 
+              className="mb-4 p-2 border rounded w-full" 
+            />
+            <button onClick={handleSignUp} className="bg-green-600 text-white rounded p-2 w-full hover:bg-green-700">Sign Up</button>
+          </>
+        ) : (
+          <>
+            <h2 className="text-2xl font-bold mb-4">Secure Storage</h2>
 
-          <input
-            type="password"
-            placeholder="Enter your file access password"
-            value={filePassword} // Pre-fill the password field with the login password
-            onChange={(e) => setFilePassword(e.target.value)}
-            className="mb-2 p-2 rounded"
-          />
-          <button onClick={handleAccessFiles} className="bg-blue-500 text-white rounded p-2">View Files</button>
-          
-          <div className="mt-4">
-            <h3 className="text-lg">Your Files:</h3>
-            <ul className="mt-2 bg-gray-900 p-2 rounded">
-              {accessFiles.length > 0 ? (
-                accessFiles.map((file, index) => (
-                  <li key={index} className="text-green-400 flex justify-between items-center">
-                    {file.name}
-                    <div className="flex items-center">
-                      <input
-                        type="password"
-                        placeholder="Enter encryption key to download"
-                        onChange={(e) => handleKeyChange(file.name, e.target.value)}
-                        className="mb-2 p-1 rounded ml-2"
-                      />
-                      <button onClick={() => handleDownloadFile(file)} className="bg-yellow-500 text-white rounded p-1">Download</button>
-                    </div>
-                  </li>
-                ))
+            <div
+              className="border-2 border-dashed border-green-500 p-4 mb-4 rounded cursor-pointer"
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+            >
+              {file ? (
+                <p>{file.name}</p>
               ) : (
-                <li className="text-red-500">No files found. Enter the correct password to view your files.</li>
+                <p>Drag & Drop your file here or click to select</p>
               )}
-            </ul>
-          </div>
-          <button onClick={() => signOut(auth)} className="bg-red-500 text-white rounded p-2 mt-4">Sign Out</button>
-        </div>
-      )}
+            </div>
+
+            <input
+              type="password"
+              placeholder="Enter encryption key"
+              value={encryptionKey}
+              onChange={(e) => setEncryptionKey(e.target.value)}
+              className="mb-2 p-2 border rounded w-full"
+            />
+            <button onClick={handleFileUpload} className="bg-green-500 text-white rounded p-2 w-full hover:bg-green-600">Upload</button>
+
+            <input
+              type="password"
+              placeholder="Enter your file access password"
+              value={filePassword}
+              onChange={(e) => setFilePassword(e.target.value)}
+              className="mb-2 p-2 border rounded w-full"
+            />
+            <button onClick={handleAccessFiles} className="bg-purple-500 text-white rounded p-2 w-full hover:bg-purple-600">Access Files</button>
+
+            <div className="mt-4">
+              {accessFiles.length > 0 ? (
+                <ul>
+                  {accessFiles.map((file, index) => (
+                    <li key={index} className="mb-2">
+                      <div className="flex items-center">
+                        <span className="mr-2">{file.name}</span>
+                        <input
+                          type="password"
+                          placeholder="Enter encryption key"
+                          value={downloadKeys[file.name] || ""}
+                          onChange={(e) => handleKeyChange(file.name, e.target.value)}
+                          className="mr-2 p-2 border rounded"
+                        />
+                        <button onClick={() => handleDownloadFile(file)} className="bg-purple-500 text-white rounded p-2 hover:bg-purple-600">Download</button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>No files available. Please enter the correct password to access your files.</p>
+              )}
+            </div>
+            <button onClick={handleSignOut} className="bg-red-500 text-white rounded p-2 mt-4 w-full hover:bg-red-600">Sign Out</button>
+          </>
+        )}
+      </div>
     </div>
   );
 };

@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { auth, storage } from "../firebase"; // Firebase Auth & Storage imports
-import { signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
+import { signOut, createUserWithEmailAndPassword, sendSignInLinkToEmail, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { ref, uploadBytes, listAll, getDownloadURL } from "firebase/storage";
 import { v4 as uuidv4 } from "uuid";
 import CryptoJS from "crypto-js"; // Make sure to install crypto-js
@@ -12,19 +12,22 @@ const StoredSecure = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [file, setFile] = useState(null);
   const [userFiles, setUserFiles] = useState([]);
-  const [filePassword, setFilePassword] = useState("");
   const [encryptionKey, setEncryptionKey] = useState("");
-  const [accessFiles, setAccessFiles] = useState([]);
-  const [downloadKeys, setDownloadKeys] = useState({}); // State to store download keys for each file
+  const [fileToView, setFileToView] = useState(null);
+  const [viewKeys, setViewKeys] = useState({}); // Store view keys for each file
+  const [fileContent, setFileContent] = useState("");
 
-  const handleLogin = async () => {
+  const handleLoginWithEmailOTP = async () => {
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      setIsLoggedIn(true);
-      alert("Logged in successfully!");
-      loadUserFiles(); // Load files after login
+      const actionCodeSettings = {
+        url: window.location.origin,
+        handleCodeInApp: true,
+      };
+
+      await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+      alert(`OTP sent to ${email}. Check your inbox!`);
     } catch (error) {
-      alert("Login failed: " + error.message);
+      alert("Error sending OTP: " + error.message);
     }
   };
 
@@ -40,6 +43,18 @@ const StoredSecure = () => {
       loadUserFiles(); // Load files after sign up
     } catch (error) {
       alert("Sign up failed: " + error.message);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    const provider = new GoogleAuthProvider();
+    try {
+      const result = await signInWithPopup(auth, provider);
+      alert("Login successful!");
+      setIsLoggedIn(true);
+      loadUserFiles(); // Load user files after sign in
+    } catch (error) {
+      alert("Google sign in failed: " + error.message);
     }
   };
 
@@ -61,10 +76,10 @@ const StoredSecure = () => {
         // Upload the original file
         await uploadBytes(originalStorageRef, file);
 
-        // Store the correct file path in userFiles
+        // Store the file name and encryption key in userFiles
         setUserFiles((prevFiles) => [
           ...prevFiles,
-          { name: fileName, originalPath: originalStorageRef.fullPath }
+          { name: fileName, originalPath: originalStorageRef.fullPath, key: encryptionKey } // Store key with file
         ]);
 
         alert("File uploaded successfully!");
@@ -84,49 +99,42 @@ const StoredSecure = () => {
       const fileList = await listAll(folderRef);
       const files = await Promise.all(
         fileList.items.map(async (item) => {
-          const url = await getDownloadURL(item);
-          return { name: item.name, url, originalPath: `StoredSecure/${auth.currentUser.uid}/original/${item.name}` }; // Ensure correct originalPath
+          return {
+            name: item.name,
+            originalPath: `StoredSecure/${auth.currentUser.uid}/original/${item.name}`,
+            key: item.name.split('-')[0], // Assuming the key is part of the file name
+          };
         })
       );
       setUserFiles(files);
-      setAccessFiles([]); // Clear access files on loading new user files
     }
   };
 
-  const handleAccessFiles = async () => {
-    if (filePassword === password) {
-      await loadUserFiles(); // Load user files after password validation
-      setAccessFiles(userFiles);
-    } else {
-      alert("Incorrect password!");
-    }
-  };
-
-  const handleDownloadFile = async (file) => {
-    const key = downloadKeys[file.name]; // Get the specific key for the current file
-    if (key === encryptionKey) { // Compare the entered key with the stored encryption key
+  const handleViewFile = async (file) => {
+    const viewKey = viewKeys[file.name] || ""; // Lấy khóa cho tệp hiện tại từ state
+    if (viewKey === file.key) { // So sánh khóa đã nhập với khóa lưu trữ của tệp
       try {
-        const originalFileRef = ref(storage, file.originalPath); // Use the original path stored in the file object
-        const originalFileUrl = await getDownloadURL(originalFileRef);
-        const link = document.createElement('a'); // Create a link element
-        link.href = originalFileUrl; // Set the link's href to the file URL
-        link.download = file.name; // Set the download attribute with the file name
-        document.body.appendChild(link); // Append the link to the body
-        link.click(); // Programmatically click the link to trigger the download
-        document.body.removeChild(link); // Remove the link from the document
+        const encryptedFileRef = ref(storage, `StoredSecure/${auth.currentUser.uid}/encrypted/${file.name}`); // Đường dẫn đến tệp đã mã hóa
+        const encryptedFileUrl = await getDownloadURL(encryptedFileRef); // Lấy URL của tệp đã mã hóa
+        
+        const response = await fetch(encryptedFileUrl);
+        const encryptedData = await response.text(); // Lấy dữ liệu mã hóa dưới dạng văn bản
+        
+        // Giải mã dữ liệu
+        const decryptedData = CryptoJS.AES.decrypt(encryptedData, viewKey).toString(CryptoJS.enc.Utf8);
+        
+        if (decryptedData) {
+          setFileContent(decryptedData); // Đặt nội dung tệp đã giải mã để hiển thị
+          setFileToView(file.name); // Đặt tên tệp để hiển thị
+        } else {
+          alert("Failed to decrypt the file. Please check the encryption key.");
+        }
       } catch (error) {
-        alert("Download failed: " + error.message);
+        alert("Error viewing file: " + error.message);
       }
     } else {
-      alert("You must enter the correct encryption key to download the file!");
+      alert("You must enter the correct encryption key to view the file!");
     }
-  };
-
-  const handleKeyChange = (fileName, key) => {
-    setDownloadKeys((prevKeys) => ({
-      ...prevKeys,
-      [fileName]: key,
-    })); // Update the specific key for the file
   };
 
   const handleSignOut = () => {
@@ -153,10 +161,17 @@ const StoredSecure = () => {
     setFile(droppedFile); // Update the file state with the dropped file
   };
 
+  const handleViewKeyChange = (fileName, key) => {
+    setViewKeys((prevKeys) => ({
+      ...prevKeys,
+      [fileName]: key // Update the key for the specific file
+    }));
+  };
+
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-r from-gray-900 to-purple-800 text-white p-6">
       <h1 className="text-5xl font-extrabold mb-8">Khoa Secure</h1>
-      <div className="bg-white text-gray-800 p-8 rounded-lg shadow-lg w-full max-w-xl flex flex-col"> {/* Increased padding and max width */}
+      <div className="bg-white text-gray-800 p-8 rounded-lg shadow-lg w-full max-w-xl flex flex-col">
         {!isLoggedIn ? (
           <>
             <h2 className="text-2xl font-bold mb-4 text-center">Login</h2>
@@ -164,89 +179,85 @@ const StoredSecure = () => {
               type="email" 
               placeholder="Email" 
               onChange={(e) => setEmail(e.target.value)} 
-              className="mb-3 p-3 border rounded w-full" // Increased padding
+              className="mb-3 p-3 border rounded w-full"
             />
-            <input 
-              type="password" 
-              placeholder="Password" 
-              onChange={(e) => setPassword(e.target.value)} 
-              className="mb-4 p-3 border rounded w-full" // Increased padding
-            />
-            <button onClick={handleLogin} className="bg-blue-600 text-white rounded p-3 w-full hover:bg-blue-700">Login</button>
+            <button onClick={handleLoginWithEmailOTP} className="bg-blue-600 text-white rounded p-3 w-full hover:bg-blue-700">Send OTP</button>
+            <button onClick={handleGoogleSignIn} className="bg-red-600 text-white rounded p-3 w-full hover:bg-red-700 mt-4">Login with Google</button>
 
             <h2 className="text-2xl font-bold mb-4 mt-6 text-center">Sign Up</h2>
             <input 
               type="password" 
               placeholder="Password" 
               onChange={(e) => setPassword(e.target.value)} 
-              className="mb-3 p-3 border rounded w-full" // Increased padding
+              className="mb-3 p-3 border rounded w-full" 
             />
             <input 
               type="password" 
               placeholder="Confirm Password" 
               onChange={(e) => setConfirmPassword(e.target.value)} 
-              className="mb-4 p-3 border rounded w-full" // Increased padding
+              className="mb-4 p-3 border rounded w-full"
             />
             <button onClick={handleSignUp} className="bg-green-600 text-white rounded p-3 w-full hover:bg-green-700">Sign Up</button>
           </>
         ) : (
           <>
-            <h2 className="text-2xl font-bold mb-4">Secure Storage</h2>
-
-            <div
-              className="border-2 border-dashed border-green-500 p-6 mb-4 rounded cursor-pointer" // Increased padding
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
+            <h2 className="text-2xl font-bold mb-4">File Manager</h2>
+            <div 
+              onDragOver={handleDragOver} 
+              onDrop={handleDrop} 
+              onClick={() => document.getElementById("fileInput").click()} 
+              className="border-dashed border-4 border-gray-300 h-40 flex items-center justify-center mb-4 cursor-pointer"
             >
               {file ? (
                 <p>{file.name}</p>
               ) : (
-                <p>Drag & Drop your file here or click to select</p>
+                <p className="text-lg">Drag & Drop your file here or click to select</p>
               )}
             </div>
-
-            <input
-              type="password"
-              placeholder="Enter encryption key"
-              value={encryptionKey}
-              onChange={(e) => setEncryptionKey(e.target.value)}
-              className="mb-2 p-3 border rounded w-full" // Increased padding
+            <input 
+              id="fileInput" 
+              type="file" 
+              onChange={(e) => setFile(e.target.files[0])} 
+              className="hidden" 
+            />
+            <input 
+              type="password" 
+              placeholder="Enter encryption key" 
+              value={encryptionKey} 
+              onChange={(e) => setEncryptionKey(e.target.value)} 
+              className="mb-2 p-3 border rounded w-full" 
             />
             <button onClick={handleFileUpload} className="bg-green-500 text-white rounded p-3 w-full hover:bg-green-600">Upload</button>
-
-            <input
-              type="password"
-              placeholder="Enter your file access password"
-              value={filePassword} 
-              onChange={(e) => setFilePassword(e.target.value)} 
-              className="mb-2 p-3 border rounded w-full" // Increased padding
-            />
-            <button onClick={handleAccessFiles} className="bg-purple-500 text-white rounded p-3 w-full hover:bg-purple-600">Access Files</button>
-
             <div className="mt-4">
-              {accessFiles.length > 0 ? (
+              {userFiles.length > 0 ? (
                 <ul>
-                  {accessFiles.map((file, index) => (
+                  {userFiles.map((file, index) => (
                     <li key={index} className="mb-2">
                       <div className="flex items-center">
                         <span className="mr-2">{file.name}</span>
-                        <input
-                          type="password"
-                          placeholder="Enter encryption key"
-                          value={downloadKeys[file.name] || ""}
-                          onChange={(e) => handleKeyChange(file.name, e.target.value)}
-                          className="mr-2 p-3 border rounded" // Increased padding
+                        <input 
+                          type="password" 
+                          placeholder="Enter view key" 
+                          value={viewKeys[file.name] || ""} 
+                          onChange={(e) => handleViewKeyChange(file.name, e.target.value)} 
+                          className="mr-2 p-3 border rounded" 
                         />
-                        <button onClick={() => handleDownloadFile(file)} className="bg-purple-500 text-white rounded p-3 hover:bg-purple-600">Download</button>
+                        <button onClick={() => handleViewFile(file)} className="bg-blue-500 text-white rounded p-3 hover:bg-blue-600">View</button>
                       </div>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p>No files available. Please enter the correct password to access your files.</p>
+                <p>No files available. Please upload files to see them here.</p>
               )}
             </div>
             <button onClick={handleSignOut} className="bg-red-500 text-white rounded p-3 mt-4 w-full hover:bg-red-600">Sign Out</button>
+            {fileToView && (
+              <div className="mt-4 bg-gray-100 p-4 rounded">
+                <h3 className="font-bold">Viewing File: {fileToView}</h3>
+                <pre>{fileContent}</pre> {/* Display the content of the file */}
+              </div>
+            )}
           </>
         )}
       </div>

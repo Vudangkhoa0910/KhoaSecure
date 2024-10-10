@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { auth, storage } from "../firebase"; // Firebase imports
 import { ref, listAll, getMetadata } from "firebase/storage";
+import { ToastContainer, toast } from 'react-toastify'; // Import ToastContainer và toast
+import 'react-toastify/dist/ReactToastify.css'; 
 
 const UserProfile = () => {
   const [userInfo, setUserInfo] = useState(null);
@@ -72,6 +74,7 @@ const UserProfile = () => {
           <p>Loading user information...</p>
         )}
       </div>
+      <ToastContainer /> 
     </div>
   );
 };

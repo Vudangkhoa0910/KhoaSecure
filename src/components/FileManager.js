@@ -4,6 +4,8 @@ import { signOut, createUserWithEmailAndPassword, sendSignInLinkToEmail, signInW
 import { ref, uploadBytes, listAll, getDownloadURL } from "firebase/storage";
 import { v4 as uuidv4 } from "uuid";
 import CryptoJS from "crypto-js"; // Make sure to install crypto-js
+import { ToastContainer, toast } from 'react-toastify'; // Import Toastify
+import 'react-toastify/dist/ReactToastify.css'; // Import CSS for Toastify
 
 const StoredSecure = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -13,9 +15,13 @@ const StoredSecure = () => {
   const [file, setFile] = useState(null);
   const [userFiles, setUserFiles] = useState([]);
   const [encryptionKey, setEncryptionKey] = useState("");
-  const [fileToView, setFileToView] = useState(null);
-  const [viewKeys, setViewKeys] = useState({}); // Store view keys for each file
+  const [viewKeys, setViewKeys] = useState({});
   const [fileContent, setFileContent] = useState("");
+  const [cameraRecording, setCameraRecording] = useState(false);
+  const [recordedVideo, setRecordedVideo] = useState(null);
+  const [decryptedFileURL, setDecryptedFileURL] = useState("");
+  const [droppedFileName, setDroppedFileName] = useState(""); // State để lưu tên tệp đã thả
+  const [fileInfo, setFileInfo] = useState(null); // Thêm state để lưu thông tin file
 
   const handleLoginWithEmailOTP = async () => {
     try {
@@ -25,24 +31,24 @@ const StoredSecure = () => {
       };
 
       await sendSignInLinkToEmail(auth, email, actionCodeSettings);
-      alert(`OTP sent to ${email}. Check your inbox!`);
+      toast(`OTP sent to ${email}. Check your inbox!`);
     } catch (error) {
-      alert("Error sending OTP: " + error.message);
+      toast("Error sending OTP: " + error.message);
     }
   };
 
   const handleSignUp = async () => {
     if (password !== confirmPassword) {
-      alert("Passwords do not match!");
+      toast("Passwords do not match!");
       return;
     }
     try {
       await createUserWithEmailAndPassword(auth, email, password);
-      alert("Account created successfully!");
+      toast("Account created successfully!");
       setIsLoggedIn(true);
       loadUserFiles(); // Load files after sign up
     } catch (error) {
-      alert("Sign up failed: " + error.message);
+      toast("Sign up failed: " + error.message);
     }
   };
 
@@ -50,46 +56,49 @@ const StoredSecure = () => {
     const provider = new GoogleAuthProvider();
     try {
       const result = await signInWithPopup(auth, provider);
-      alert("Login successful!");
+      toast("Login successful!");
       setIsLoggedIn(true);
       loadUserFiles(); // Load user files after sign in
     } catch (error) {
-      alert("Google sign in failed: " + error.message);
+      toast("Google sign in failed: " + error.message);
     }
   };
 
+  const handleGenerateKey = () => {
+    const key = uuidv4();
+    setEncryptionKey(key);
+    toast(`Generated key: ${key}`);
+  };
+
   const handleFileUpload = async () => {
-    if (file && encryptionKey) {
+    const fixedKey = encryptionKey; // Use the generated key for encryption
+    if (file && fixedKey) {
       const reader = new FileReader();
       reader.onload = async (event) => {
         const fileData = event.target.result;
-        const encryptedData = CryptoJS.AES.encrypt(fileData, encryptionKey).toString();
+        const encryptedData = CryptoJS.AES.encrypt(fileData, fixedKey).toString();
 
         const fileName = `${uuidv4()}-${file.name}`;
         const encryptedStorageRef = ref(storage, `StoredSecure/${auth.currentUser.uid}/encrypted/${fileName}`);
         const originalStorageRef = ref(storage, `StoredSecure/${auth.currentUser.uid}/original/${fileName}`);
-        
-        // Upload the encrypted data
+
         const encryptedBlob = new Blob([encryptedData], { type: "text/plain" });
         await uploadBytes(encryptedStorageRef, encryptedBlob);
-        
-        // Upload the original file
         await uploadBytes(originalStorageRef, file);
 
-        // Store the file name and encryption key in userFiles
         setUserFiles((prevFiles) => [
           ...prevFiles,
-          { name: fileName, originalPath: originalStorageRef.fullPath, key: encryptionKey } // Store key with file
+          { name: fileName, originalPath: originalStorageRef.fullPath, key: fixedKey } // Use the generated key for storage
         ]);
 
-        alert("File uploaded successfully!");
-        loadUserFiles(); // Refresh the file list after upload
-        setFile(null); // Reset the file input after upload
-        setEncryptionKey(""); // Clear encryption key
+        toast("File uploaded successfully!");
+        loadUserFiles();
+        setFile(null);
+        setEncryptionKey(""); // Clear encryption key after upload
       };
       reader.readAsText(file); // Read the file as text for encryption
     } else {
-      alert("Please select a file and enter your encryption key!");
+      toast("Please select a file and enter your encryption key!");
     }
   };
 
@@ -111,30 +120,61 @@ const StoredSecure = () => {
   };
 
   const handleViewFile = async (file) => {
-    const viewKey = viewKeys[file.name] || ""; // Lấy khóa cho tệp hiện tại từ state
-    if (viewKey === file.key) { // So sánh khóa đã nhập với khóa lưu trữ của tệp
-      try {
-        const encryptedFileRef = ref(storage, `StoredSecure/${auth.currentUser.uid}/encrypted/${file.name}`); // Đường dẫn đến tệp đã mã hóa
-        const encryptedFileUrl = await getDownloadURL(encryptedFileRef); // Lấy URL của tệp đã mã hóa
-        
-        const response = await fetch(encryptedFileUrl);
-        const encryptedData = await response.text(); // Lấy dữ liệu mã hóa dưới dạng văn bản
-        
-        // Giải mã dữ liệu
-        const decryptedData = CryptoJS.AES.decrypt(encryptedData, viewKey).toString(CryptoJS.enc.Utf8);
-        
-        if (decryptedData) {
-          setFileContent(decryptedData); // Đặt nội dung tệp đã giải mã để hiển thị
-          setFileToView(file.name); // Đặt tên tệp để hiển thị
-        } else {
-          alert("Failed to decrypt the file. Please check the encryption key.");
-        }
-      } catch (error) {
-        alert("Error viewing file: " + error.message);
-      }
-    } else {
-      alert("You must enter the correct encryption key to view the file!");
+    const fileKey = viewKeys[file.name];
+    if (!fileKey) {
+      toast("Please enter the view key!");
+      return;
     }
+
+    // Start camera recording for 3 seconds
+    setCameraRecording(true);
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(async (stream) => {
+        const mediaRecorder = new MediaRecorder(stream);
+        const recordedChunks = [];
+
+        mediaRecorder.ondataavailable = (event) => {
+          recordedChunks.push(event.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+          const blob = new Blob(recordedChunks, { type: "video/webm" });
+          const url = URL.createObjectURL(blob);
+          setRecordedVideo(url);
+          setCameraRecording(false);
+
+          // Get the encrypted file from Firebase
+          const encryptedFileRef = ref(storage, `StoredSecure/${auth.currentUser.uid}/encrypted/${file.name}`);
+          const downloadURL = await getDownloadURL(encryptedFileRef);
+
+          const response = await fetch(downloadURL);
+          const encryptedData = await response.text();
+
+          // Decrypt the file using the view key
+          const decryptedData = CryptoJS.AES.decrypt(encryptedData, fileKey).toString(CryptoJS.enc.Utf8);
+
+          if (!decryptedData) {
+            toast("Invalid key or failed to decrypt the file!");
+            return;
+          }
+
+          setFileContent(decryptedData); // Đặt nội dung để hiển thị
+
+          // Lấy URL cho tệp gốc
+          const originalFileRef = ref(storage, `StoredSecure/${auth.currentUser.uid}/original/${file.name}`);
+          const originalDownloadURL = await getDownloadURL(originalFileRef);
+          setDecryptedFileURL(originalDownloadURL); // Lưu URL để tải xuống tệp gốc
+        };
+
+        mediaRecorder.start();
+        setTimeout(() => {
+          mediaRecorder.stop();
+        }, 3000); // Stop recording after 3 seconds
+      })
+      .catch(error => {
+        toast("Error accessing camera: " + error.message);
+        setCameraRecording(false);
+      });
   };
 
   const handleSignOut = () => {
@@ -142,10 +182,10 @@ const StoredSecure = () => {
       signOut(auth)
         .then(() => {
           setIsLoggedIn(false);
-          alert("Signed out successfully!");
+          toast("Signed out successfully!");
         })
         .catch((error) => {
-          alert("Sign out failed: " + error.message);
+          toast("Sign out failed: " + error.message);
         });
     }
   };
@@ -158,7 +198,17 @@ const StoredSecure = () => {
   const handleDrop = (event) => {
     event.preventDefault();
     const droppedFile = event.dataTransfer.files[0];
-    setFile(droppedFile); // Update the file state with the dropped file
+    if (droppedFile) {
+      setFile(droppedFile); // Cập nhật trạng thái file với file đã thả
+      setDroppedFileName(droppedFile.name); // Lưu tên tệp đã thả
+
+      // Hiển thị thông tin file
+      setFileInfo({
+        name: droppedFile.name,
+        size: droppedFile.size,
+        type: droppedFile.type
+      });
+    }
   };
 
   const handleViewKeyChange = (fileName, key) => {
@@ -179,88 +229,106 @@ const StoredSecure = () => {
               type="email" 
               placeholder="Email" 
               onChange={(e) => setEmail(e.target.value)} 
-              className="mb-3 p-3 border rounded w-full"
+              className="p-2 mb-4 border border-gray-300 rounded" 
             />
-            <button onClick={handleLoginWithEmailOTP} className="bg-blue-600 text-white rounded p-3 w-full hover:bg-blue-700">Send OTP</button>
-            <button onClick={handleGoogleSignIn} className="bg-red-600 text-white rounded p-3 w-full hover:bg-red-700 mt-4">Login with Google</button>
-
-            <h2 className="text-2xl font-bold mb-4 mt-6 text-center">Sign Up</h2>
             <input 
               type="password" 
               placeholder="Password" 
               onChange={(e) => setPassword(e.target.value)} 
-              className="mb-3 p-3 border rounded w-full" 
+              className="p-2 mb-4 border border-gray-300 rounded" 
             />
+            <button 
+              onClick={handleLoginWithEmailOTP} 
+              className="bg-blue-500 text-white py-2 rounded mb-4">Send OTP</button>
+            <h2 className="text-2xl font-bold mb-4 text-center">Or Sign Up</h2>
             <input 
               type="password" 
               placeholder="Confirm Password" 
               onChange={(e) => setConfirmPassword(e.target.value)} 
-              className="mb-4 p-3 border rounded w-full"
+              className="p-2 mb-4 border border-gray-300 rounded" 
             />
-            <button onClick={handleSignUp} className="bg-green-600 text-white rounded p-3 w-full hover:bg-green-700">Sign Up</button>
+            <button 
+              onClick={handleSignUp} 
+              className="bg-green-500 text-white py-2 rounded mb-4">Sign Up</button>
+            <button 
+              onClick={handleGoogleSignIn} 
+              className="bg-red-500 text-white py-2 rounded">Sign in with Google</button>
           </>
         ) : (
           <>
-            <h2 className="text-2xl font-bold mb-4">File Manager</h2>
+            <h2 className="text-2xl font-bold mb-4 text-center">Welcome, {auth.currentUser.email}</h2>
+            <button onClick={handleSignOut} className="bg-red-500 text-white py-2 rounded mb-4">Sign Out</button>
+
+            <h3 className="text-xl mb-4">Upload File</h3>
             <div 
+              className="border-2 border-dashed border-gray-300 p-6 mb-4 text-center" 
               onDragOver={handleDragOver} 
-              onDrop={handleDrop} 
-              onClick={() => document.getElementById("fileInput").click()} 
-              className="border-dashed border-4 border-gray-300 h-40 flex items-center justify-center mb-4 cursor-pointer"
-            >
-              {file ? (
-                <p>{file.name}</p>
-              ) : (
-                <p className="text-lg">Drag & Drop your file here or click to select</p>
-              )}
+              onDrop={handleDrop}>
+              <p>Drag & Drop your file here or</p>
+              <input 
+                type="file" 
+                onChange={(e) => setFile(e.target.files[0])} 
+                className="mt-4" 
+              />
             </div>
+            {droppedFileName && <p className="text-green-500">Dropped File: {droppedFileName}</p>}
+            {fileInfo && (
+              <div className="mb-4">
+                <p>File Name: {fileInfo.name}</p>
+                <p>File Size: {fileInfo.size} bytes</p>
+                <p>File Type: {fileInfo.type}</p>
+              </div>
+            )}
             <input 
-              id="fileInput" 
-              type="file" 
-              onChange={(e) => setFile(e.target.files[0])} 
-              className="hidden" 
-            />
-            <input 
-              type="password" 
-              placeholder="Enter encryption key" 
+              type="text" 
+              placeholder="Enter Encryption Key" 
               value={encryptionKey} 
               onChange={(e) => setEncryptionKey(e.target.value)} 
-              className="mb-2 p-3 border rounded w-full" 
+              className="p-2 mb-4 border border-gray-300 rounded" 
             />
-            <button onClick={handleFileUpload} className="bg-green-500 text-white rounded p-3 w-full hover:bg-green-600">Upload</button>
-            <div className="mt-4">
-              {userFiles.length > 0 ? (
-                <ul>
-                  {userFiles.map((file, index) => (
-                    <li key={index} className="mb-2">
-                      <div className="flex items-center">
-                        <span className="mr-2">{file.name}</span>
-                        <input 
-                          type="password" 
-                          placeholder="Enter view key" 
-                          value={viewKeys[file.name] || ""} 
-                          onChange={(e) => handleViewKeyChange(file.name, e.target.value)} 
-                          className="mr-2 p-3 border rounded" 
-                        />
-                        <button onClick={() => handleViewFile(file)} className="bg-blue-500 text-white rounded p-3 hover:bg-blue-600">View</button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p>No files available. Please upload files to see them here.</p>
-              )}
-            </div>
-            <button onClick={handleSignOut} className="bg-red-500 text-white rounded p-3 mt-4 w-full hover:bg-red-600">Sign Out</button>
-            {fileToView && (
-              <div className="mt-4 bg-gray-100 p-4 rounded">
-                <h3 className="font-bold">Viewing File: {fileToView}</h3>
-                <pre>{fileContent}</pre> {/* Display the content of the file */}
+            <button 
+              onClick={handleGenerateKey} 
+              className="bg-yellow-500 text-white py-2 rounded mb-4">Generate Key</button>
+            <button 
+              onClick={handleFileUpload} 
+              className="bg-blue-500 text-white py-2 rounded">Upload File</button>
+
+            <h3 className="text-xl mb-4 mt-8">Your Files</h3>
+            <ul>
+              {userFiles.map((file) => (
+                <li key={file.name} className="flex justify-between items-center mb-2">
+                  <span>{file.name}</span>
+                  <div>
+                    <input 
+                      type="text" 
+                      placeholder="Enter View Key" 
+                      onChange={(e) => handleViewKeyChange(file.name, e.target.value)} 
+                      className="p-1 border border-gray-300 rounded" 
+                    />
+                    <button 
+                      onClick={() => handleViewFile(file)} 
+                      className="bg-green-500 text-white py-1 rounded ml-2">View</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+
+            {cameraRecording && <p className="text-yellow-500">Recording camera for 3 seconds...</p>}
+            {recordedVideo && (
+              <video controls src={recordedVideo} className="mt-4"></video>
+            )}
+            {fileContent && (
+              <div className="mt-4">
+                <h4 className="text-lg font-bold">File Content:</h4>
+                {decryptedFileURL && (
+                  <a href={decryptedFileURL} className="text-blue-500" download>Download Original File</a>
+                )}
               </div>
             )}
           </>
         )}
       </div>
+      <ToastContainer /> {/* Thêm ToastContainer để hiển thị thông báo */}
     </div>
   );
 };

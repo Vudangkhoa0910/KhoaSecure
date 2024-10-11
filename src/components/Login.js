@@ -94,7 +94,7 @@ const Login = () => {
     try {
       await signInWithPopup(auth, googleProvider);
       showNotification("Logged in with Google successfully!", "success");
-      navigate("/dashboard");
+      navigate("/profile");
     } catch (error) {
       showNotification("Google login failed: " + error.message, "error");
     }

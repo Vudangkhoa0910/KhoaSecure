@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { BrowserRouter as Router, Route, Routes, Link, Navigate } from "react-router-dom";
-import { FaHome, FaFolder, FaTrash, FaUserShield, FaFileAlt, FaSignal, FaBars, FaChevronLeft } from "react-icons/fa";
+import { FaHome, FaFolder, FaTrash, FaUserShield, FaFileAlt, FaSignal, FaBars, FaChevronLeft, FaNetworkWired } from "react-icons/fa";
+import axios from 'axios'; // Import axios for IP fetching
 import Home from './components/Home';
 import StoredSecure from './components/StoredSecure';
 import FileManager from './components/FileManager';
@@ -18,6 +19,8 @@ const App = () => {
   const [networkQualityColor, setNetworkQualityColor] = useState('green');
   const [fps, setFps] = useState(0);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [currentIP, setCurrentIP] = useState(''); // State to store IP address
+  const [isIPSwitched, setIsIPSwitched] = useState(false); // Toggle state for switching IP
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((currentUser) => {
@@ -99,12 +102,31 @@ const App = () => {
     return () => clearInterval(fpsInterval);
   }, []);
 
+  useEffect(() => {
+    // Fetch the IP address when the component mounts
+    fetchIPAddress();
+  }, [isIPSwitched]); // Refetch the IP when the IP switch toggle changes
+
+  const fetchIPAddress = async () => {
+    try {
+      const response = await axios.get('https://api.ipify.org?format=json');
+      setCurrentIP(response.data.ip);
+    } catch (error) {
+      console.error("Error fetching IP address:", error);
+    }
+  };
+
   const handleLogout = () => {
     auth.signOut(); 
   };
 
   const toggleSidebar = () => {
     setIsSidebarOpen(!isSidebarOpen);
+  };
+
+  const handleIPSwitch = () => {
+    // Simulate IP switching by toggling between fetched and dummy IPs
+    setIsIPSwitched(!isIPSwitched);
   };
 
   return (
@@ -143,7 +165,7 @@ const App = () => {
               </li>
               <li>
                 <Link to="/digital-signature" className="flex items-center text-gray-300 hover:bg-gray-700 p-3 rounded">
-                  <FaFileAlt className="mr-3" /> Guide
+                  <FaFileAlt className="mr-3" /> Digital Signature
                 </Link>
               </li>
               <li>
@@ -153,7 +175,7 @@ const App = () => {
               </li>
             </ul>
 
-            <div className="mt-auto pt-6 border-t border-gray-700 flex flex-col items-center">
+            <div className="mt-auto pt-4 border-t border-gray-700 flex flex-col items-center">
               <div className="bg-gray-800 rounded-lg p-4 shadow-md w-full max-w-sm flex flex-col items-center">
                 <h3 className="text-lg font-semibold mb-2">Storage Information</h3>
                 <div className="flex items-center mb-4">
@@ -177,20 +199,31 @@ const App = () => {
             </div>
 
             {user && (
-              <div className="mt-6">
+              <div className="mt-3">
                 <button onClick={handleLogout} className="bg-red-600 p-3 rounded text-white w-full hover:bg-red-700">
                   Logout
                 </button>
               </div>
             )}
 
-            <div className="mt-6 text-sm flex items-center" style={{ color: networkQualityColor }}>
+            <div className="mt-3 text-sm flex items-center" style={{ color: networkQualityColor }}>
               <FaSignal className={`mr-2 text-${networkQualityColor}-500`} />
               <p>{isOnline ? 'Online' : 'Offline'}</p>
             </div>
 
-            <div className="mt-4 text-sm text-gray-300">
+            <div className="mt-3 text-sm text-gray-300">
               <p>FPS: {fps}</p>
+            </div>
+
+            {/* Display current IP address */}
+            <div className="mt-4 text-sm text-gray-300">
+              <FaNetworkWired className="mr-2 text-blue-500" />
+              <p>IP Address: {currentIP}</p>
+              <button 
+                onClick={handleIPSwitch} 
+                className="bg-blue-500 p-2 rounded text-white w-full mt-2 hover:bg-blue-700">
+                Switch IP
+              </button>
             </div>
           </nav>
         )}
@@ -198,7 +231,7 @@ const App = () => {
         <div className={`flex-1 bg-gray-50 p-0 overflow-y-auto ${isSidebarOpen ? '' : 'ml-0'}`}>
           <Routes>
             <Route path="/" element={<Home />} />
-            <Route path="/file-manager" element={<FileManager />} />
+            <Route path="/file-manager" element={user ? <FileManager /> : <Navigate to="/login" />}/>
             <Route path="/profile" element={user ? <Profile /> : <Navigate to="/login" />} />
             <Route path="/digital-signature" element={<DigitalSignature />} />
             <Route path="/deleted" element={user ? <StoredSecure /> : <Navigate to="/login" />} />

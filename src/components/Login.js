@@ -110,13 +110,13 @@ const detect = (video, faceCascade) => {
       let face = faces.get(i);
       ctx.beginPath();
       ctx.rect(face.x, face.y, face.width, face.height);
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = "red";
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "green";
       ctx.stroke();
 
       // Vẽ tên "Khoa" phía trên hình chữ nhật
-      ctx.fillStyle = "red"; // Màu sắc chữ
-      ctx.font = "35px Arial"; // Phong chữ
+      ctx.fillStyle = "blue"; // Màu sắc chữ
+      ctx.font = "25px Arial"; // Phong chữ
       ctx.fillText("Khoa", face.x, face.y > 10 ? face.y - 5 : 10); // Vẽ tên
     }
 

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import forge from "node-forge";
-import { ToastContainer, toast } from 'react-toastify'; // Import Toastify
-import 'react-toastify/dist/ReactToastify.css'; // Import CSS for Toastify
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 const DigitalSignature = () => {
   const [message, setMessage] = useState("");
@@ -9,7 +9,11 @@ const DigitalSignature = () => {
   const [publicKey, setPublicKey] = useState("");
   const [signature, setSignature] = useState("");
 
-  // Tạo cặp khóa RSA
+  const [verifyMessage, setVerifyMessage] = useState("");  // New state for verification message
+  const [verifyPublicKey, setVerifyPublicKey] = useState(""); // New state for verification public key
+  const [verifySignature, setVerifySignature] = useState(""); // New state for verification signature
+
+  // Generate RSA key pair
   const generateRSAKeys = () => {
     const keypair = forge.pki.rsa.generateKeyPair({ bits: 2048, e: 0x10001 });
     const publicKeyPem = forge.pki.publicKeyToPem(keypair.publicKey);
@@ -17,10 +21,10 @@ const DigitalSignature = () => {
 
     setPublicKey(publicKeyPem);
     setPrivateKey(privateKeyPem);
-    toast.success("Cặp khóa RSA đã được tạo thành công!"); // Thông báo thành công
+    toast.success("RSA Key pair generated successfully!");
   };
 
-  // Ký thông điệp
+  // Sign the message
   const signMessage = () => {
     if (message && privateKey) {
       const privateKeyObj = forge.pki.privateKeyFromPem(privateKey);
@@ -29,37 +33,34 @@ const DigitalSignature = () => {
       const signatureBytes = privateKeyObj.sign(md);
       const encodedSignature = forge.util.encode64(signatureBytes);
       setSignature(encodedSignature);
-      toast.success("Thông điệp đã được ký thành công!"); // Thông báo thành công
+      toast.success("Message signed successfully!");
     } else {
-      toast.error("Vui lòng nhập một thông điệp và cung cấp khóa riêng."); // Thông báo lỗi
+      toast.error("Please enter a message and provide the private key.");
     }
   };
 
-  // Xác thực chữ ký
-  const verifySignature = () => {
-    if (signature && publicKey && message) {
-      const publicKeyObj = forge.pki.publicKeyFromPem(publicKey);
+  // Verify the signature
+  const verifySignatureFunc = () => {
+    if (verifySignature && verifyPublicKey && verifyMessage) {
+      const publicKeyObj = forge.pki.publicKeyFromPem(verifyPublicKey);
       const md = forge.md.sha256.create();
-      md.update(message, "utf8");
-      
-      // Giải mã chữ ký
-      const decodedSignature = forge.util.decode64(signature);
+      md.update(verifyMessage, "utf8");
 
-      // Xác thực chữ ký
+      const decodedSignature = forge.util.decode64(verifySignature);
+
       const isValid = publicKeyObj.verify(md.digest().bytes(), decodedSignature);
-      toast.success(isValid ? "Chữ ký hợp lệ!" : "Chữ ký không hợp lệ!"); // Thông báo xác thực
+      toast.success(isValid ? "Signature is valid!" : "Signature is not valid!");
     } else {
-      toast.error("Vui lòng nhập thông điệp, chữ ký và khóa công khai."); // Thông báo lỗi
+      toast.error("Please enter message, signature, and public key for verification.");
     }
   };
 
-  // Tải chữ ký xuống tệp
   const downloadSignature = () => {
     if (signature) {
-      const content = `Thông điệp: ${message}\nChữ ký: ${signature}\nKhóa công khai: ${publicKey}`;
+      const content = `Message: ${message}\nSignature: ${signature}\nPublic Key: ${publicKey}`;
       const blob = new Blob([content], { type: "text/plain" });
       const url = URL.createObjectURL(blob);
-      
+
       const a = document.createElement("a");
       a.href = url;
       a.download = "signature.txt";
@@ -67,21 +68,20 @@ const DigitalSignature = () => {
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
-      toast.success("Tệp chữ ký đã được tải xuống!"); // Thông báo tải xuống thành công
+      toast.success("Signature file downloaded!");
     } else {
-      toast.error("Chưa có chữ ký để tải xuống."); // Thông báo lỗi
+      toast.error("No signature to download.");
     }
   };
 
-  // Chia sẻ qua email
   const shareByEmail = () => {
     if (signature) {
-      const subject = "Chữ Ký Số Của Tôi";
-      const body = `Thông điệp: ${message}\nChữ ký: ${signature}\nKhóa công khai: ${publicKey}`;
+      const subject = "My Digital Signature";
+      const body = `Message: ${message}\nSignature: ${signature}\nPublic Key: ${publicKey}`;
       window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-      toast.success("Mở ứng dụng email để chia sẻ chữ ký!"); // Thông báo chia sẻ
+      toast.success("Opening email application to share signature!");
     } else {
-      toast.error("Chưa có chữ ký để chia sẻ."); // Thông báo lỗi
+      toast.error("No signature to share.");
     }
   };
 
@@ -93,57 +93,78 @@ const DigitalSignature = () => {
         <textarea
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          placeholder="Nhập thông điệp để ký"
+          placeholder="Enter message to sign"
           className="w-full h-32 bg-gray-800 text-white p-4 rounded"
         />
 
         <button onClick={generateRSAKeys} className="mt-4 p-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded w-full">
-          Tạo Cặp Khóa RSA
+          Generate RSA Key Pair
         </button>
 
         {publicKey && (
           <div className="mt-6 w-full">
-            <h3 className="text-xl mb-2">Khóa Công Khai:</h3>
+            <h3 className="text-xl mb-2">Public Key:</h3>
             <textarea className="w-full h-32 bg-gray-900 text-white p-4 rounded" readOnly value={publicKey} />
           </div>
         )}
 
         {privateKey && (
           <div className="mt-6 w-full">
-            <h3 className="text-xl mb-2">Khóa Riêng:</h3>
+            <h3 className="text-xl mb-2">Private Key:</h3>
             <textarea className="w-full h-32 bg-gray-900 text-white p-4 rounded" readOnly value={privateKey} />
           </div>
         )}
 
         <button onClick={signMessage} className="mt-4 p-3 bg-blue-600 hover:bg-blue-700 text-white rounded w-full">
-          Ký Thông Điệp
+          Sign Message
         </button>
 
         {signature && (
           <div className="mt-6 w-full">
-            <h3 className="text-xl mb-2">Chữ Ký:</h3>
+            <h3 className="text-xl mb-2">Signature:</h3>
             <textarea className="w-full h-32 bg-gray-900 text-white p-4 rounded" readOnly value={signature} />
           </div>
         )}
 
-        <button onClick={verifySignature} className="mt-4 p-3 bg-green-600 hover:bg-green-700 text-white rounded w-full">
-          Xác Thực Chữ Ký
-        </button>
-
         <button onClick={downloadSignature} className="mt-4 p-3 bg-orange-600 hover:bg-orange-700 text-white rounded w-full">
-          Tải Xuống Chữ Ký
+          Download Signature
         </button>
 
         <button onClick={shareByEmail} className="mt-4 p-3 bg-purple-600 hover:bg-purple-700 text-white rounded w-full">
-          Chia Sẻ Qua Email
+          Share via Email
         </button>
+
+        {/* New Section for Signature Verification */}
+        <div className="mt-6">
+          <h2 className="text-2xl font-bold">Verify Signature</h2>
+          <textarea
+            value={verifyMessage}
+            onChange={(e) => setVerifyMessage(e.target.value)}
+            placeholder="Enter message to verify"
+            className="w-full h-20 bg-gray-800 text-white p-4 rounded mt-4"
+          />
+          <textarea
+            value={verifySignature}
+            onChange={(e) => setVerifySignature(e.target.value)}
+            placeholder="Enter signature to verify"
+            className="w-full h-15 bg-gray-800 text-white p-4 rounded mt-3"
+          />
+          <textarea
+            value={verifyPublicKey}
+            onChange={(e) => setVerifyPublicKey(e.target.value)}
+            placeholder="Enter public key to verify"
+            className="w-full h-15 bg-gray-800 text-white p-4 rounded mt-3"
+          />
+
+          <button onClick={verifySignatureFunc} className="mt-4 p-3 bg-green-600 hover:bg-green-700 text-white rounded w-full">
+            Verify Signature
+          </button>
+        </div>
       </div>
 
-      <ToastContainer /> {/* Thêm ToastContainer để hiển thị thông báo */}
+      <ToastContainer />
     </div>
   );
 };
 
 export default DigitalSignature;
-
-// Thông báo React Toastify

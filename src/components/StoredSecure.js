@@ -93,6 +93,7 @@ const StoredSecure = () => {
     }
   };
 
+  
   const handleAccessFiles = async () => {
     if (filePassword === password) {
       await loadUserFiles(); // Load user files after password validation

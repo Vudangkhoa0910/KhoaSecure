@@ -320,6 +320,7 @@ const StoredSecure = () => {
             {fileContent && (
               <div className="mt-4">
                 <h4 className="text-lg font-bold">File Content:</h4>
+
                 {decryptedFileURL && (
                   <a href={decryptedFileURL} className="text-blue-500" download>Download Original File</a>
                 )}

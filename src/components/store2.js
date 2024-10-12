@@ -73,71 +73,51 @@ const Login = () => {
     
           detectFace();
         } catch (error) {
-          // console.error("Error loading OpenCV:", error);
-          // showNotification("Error loading OpenCV: " + error.message, "error");
+          console.error("Error loading OpenCV:", error);
+          showNotification("Error loading OpenCV: " + error.message, "error");
         }
       }
     };
     
     loadOpenCv();
-  }, []); // Chỉ chạy khi component được mount
+  }, []);
 
   // Detect face and draw rectangle
-  // Detect face and draw rectangle with name
-const detect = (video, faceCascade) => {
-  const canvas = canvasRef.current;
-  const ctx = canvas.getContext("2d");
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+  const detect = (video, faceCascade) => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
 
-  const detectLoop = () => {
-    // Lật canvas
-    ctx.save();
-    ctx.scale(-1, 1); // Lật ảnh theo trục ngang
-    ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
-    ctx.restore(); // Khôi phục lại trạng thái canvas
+    const detectLoop = () => {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      let src = cv.matFromImageData(imageData);
+      let gray = new cv.Mat();
 
-    let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    let src = cv.matFromImageData(imageData);
-    let gray = new cv.Mat();
+      cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
 
-    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
+      let faces = new cv.RectVector();
+      faceCascade.detectMultiScale(gray, faces, 1.1, 3, 0);
 
-    let faces = new cv.RectVector();
-    faceCascade.detectMultiScale(gray, faces, 1.1, 3, 0);
+      for (let i = 0; i < faces.size(); i++) {
+        let face = faces.get(i);
+        ctx.beginPath();
+        ctx.rect(face.x, face.y, face.width, face.height);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "red";
+        ctx.stroke();
+      }
 
-    for (let i = 0; i < faces.size(); i++) {
-      let face = faces.get(i);
-      ctx.beginPath();
-      ctx.rect(face.x, face.y, face.width, face.height);
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = "red";
-      ctx.stroke();
+      src.delete();
+      gray.delete();
+      faces.delete();
 
-      // Vẽ tên "Khoa" phía trên hình chữ nhật
-      ctx.fillStyle = "red"; // Màu sắc chữ
-      ctx.font = "35px Arial"; // Phong chữ
-      ctx.fillText("Khoa", face.x, face.y > 10 ? face.y - 5 : 10); // Vẽ tên
-    }
+      requestAnimationFrame(detectLoop);
+    };
 
-    src.delete();
-    gray.delete();
-    faces.delete();
-
-    requestAnimationFrame(detectLoop);
+    detectLoop();
   };
-
-  detectLoop();
-};
-
-// Trong return, thiết lập thuộc tính mirrored của Webcam
-<Webcam
-  ref={webcamRef}
-  audio={false}
-  mirrored={true} // Lật video
-  className="w-full h-64 rounded-lg shadow-lg"
-/>
-
 
   // Start recording
   const startRecording = useCallback(() => {

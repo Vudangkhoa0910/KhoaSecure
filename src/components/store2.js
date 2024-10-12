@@ -1,289 +1,358 @@
-import React, { useState, useRef, useCallback, useEffect } from "react";
-import { auth, googleProvider, storage } from "../firebase";
-import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signInWithPopup,
-  sendPasswordResetEmail,
-} from "firebase/auth";
-import { ref, uploadBytes } from "firebase/storage";
-import { useNavigate } from "react-router-dom";
-import Webcam from "react-webcam";
-import { ToastContainer, toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
-import cv from 'opencv-ts';
+import { useState, useEffect } from "react";
+import { auth, storage } from "../firebase"; // Firebase Auth & Storage imports
+import { signOut, createUserWithEmailAndPassword, sendSignInLinkToEmail, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { ref, uploadBytes, listAll, getDownloadURL } from "firebase/storage";
+import { v4 as uuidv4 } from "uuid";
+import CryptoJS from "crypto-js"; // Make sure to install crypto-js
+import { ToastContainer, toast } from 'react-toastify'; // Import Toastify
+import 'react-toastify/dist/ReactToastify.css'; // Import CSS for Toastify
 
-const Login = () => {
+const StoredSecure = () => {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [resetEmail, setResetEmail] = useState("");
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [notification, setNotification] = useState({ message: "", type: "" });
-  const [isLogin, setIsLogin] = useState(true);
-  const [isRecording, setIsRecording] = useState(false);
-  const [videoUploaded, setVideoUploaded] = useState(false);
-  const webcamRef = useRef(null);
-  const canvasRef = useRef(null);
-  const navigate = useNavigate();
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [file, setFile] = useState(null);
+  const [userFiles, setUserFiles] = useState([]);
+  const [encryptionKey, setEncryptionKey] = useState("");
+  const [viewKeys, setViewKeys] = useState({});
+  const [fileContent, setFileContent] = useState("");
+  const [cameraRecording, setCameraRecording] = useState(false);
+  const [recordedVideo, setRecordedVideo] = useState(null);
+  const [decryptedFileURL, setDecryptedFileURL] = useState("");
+  const [droppedFileName, setDroppedFileName] = useState(""); // State để lưu tên tệp đã thả
+  const [fileInfo, setFileInfo] = useState(null); // Thêm state để lưu thông tin file
 
-  // Helper function for notifications
-  const showNotification = (message, type) => {
-    toast[type](message);
-  };
-
-  // Capture video and upload to Firebase
-  const captureVideo = useCallback(() => {
-    const videoStream = webcamRef.current.getCanvas();
-    if (videoStream) {
-      videoStream.toBlob(async (blob) => {
-        const storageRef = ref(storage, `user-videos/${email}.mp4`);
-        await uploadBytes(storageRef, blob);
-        setVideoUploaded(true);
-        showNotification("Video captured and uploaded successfully!", "success");
-      }, "video/mp4");
-    }
-  }, [webcamRef, email]);
-
-  // Load OpenCV
-  useEffect(() => {
-    const loadOpenCv = async () => {
-      if (cv && cv.CascadeClassifier) {
-        const faceCascade = new cv.CascadeClassifier();
-    
-        try {
-          const xmlUrl = 'https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml';
-          const response = await fetch(xmlUrl);
-    
-          if (!response.ok) {
-            throw new Error("Unable to fetch the cascade file.");
-          }
-    
-          const data = await response.text();
-          cv.FS_createDataFile("/", "haarcascade_frontalface_default.xml", data, true, false);
-          faceCascade.load('haarcascade_frontalface_default.xml');
-
-          const detectFace = () => {
-            const video = webcamRef.current.video;
-            if (video && video.videoWidth > 0 && video.videoHeight > 0) {
-              detect(video, faceCascade);
-            } else {
-              setTimeout(detectFace, 100);
-            }
-          };
-    
-          detectFace();
-        } catch (error) {
-          console.error("Error loading OpenCV:", error);
-          showNotification("Error loading OpenCV: " + error.message, "error");
-        }
-      }
-    };
-    
-    loadOpenCv();
-  }, []);
-
-  // Detect face and draw rectangle
-  const detect = (video, faceCascade) => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-
-    const detectLoop = () => {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      let src = cv.matFromImageData(imageData);
-      let gray = new cv.Mat();
-
-      cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
-
-      let faces = new cv.RectVector();
-      faceCascade.detectMultiScale(gray, faces, 1.1, 3, 0);
-
-      for (let i = 0; i < faces.size(); i++) {
-        let face = faces.get(i);
-        ctx.beginPath();
-        ctx.rect(face.x, face.y, face.width, face.height);
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = "red";
-        ctx.stroke();
-      }
-
-      src.delete();
-      gray.delete();
-      faces.delete();
-
-      requestAnimationFrame(detectLoop);
-    };
-
-    detectLoop();
-  };
-
-  // Start recording
-  const startRecording = useCallback(() => {
-    setIsRecording(true);
-    setTimeout(() => {
-      captureVideo();
-      setIsRecording(false);
-    }, 3000);
-  }, [captureVideo]);
-
-  const handleRecordAndSubmit = async () => {
-    startRecording();
-    setTimeout(() => {
-      if (isLogin) {
-        handleLogin();
-      } else {
-        handleSignUp();
-      }
-    }, 3000);
-  };
-
-  // Handle login
-  const handleLogin = async () => {
+  const handleLoginWithEmailOTP = async () => {
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      showNotification("Logged in successfully!", "success");
-      navigate("/profile");
+      const actionCodeSettings = {
+        url: window.location.origin,
+        handleCodeInApp: true,
+      };
+
+      await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+      toast(`OTP sent to ${email}. Check your inbox!`);
     } catch (error) {
-      showNotification("Login failed: " + error.message, "error");
+      toast("Error sending OTP: " + error.message);
     }
   };
 
-  // Handle signup
   const handleSignUp = async () => {
+    if (password !== confirmPassword) {
+      toast("Passwords do not match!");
+      return;
+    }
     try {
       await createUserWithEmailAndPassword(auth, email, password);
-      showNotification("Account created successfully!", "success");
-      navigate("/profile");
+      toast("Account created successfully!");
+      setIsLoggedIn(true);
+      loadUserFiles(); // Load files after sign up
     } catch (error) {
-      showNotification("Sign up failed: " + error.message, "error");
+      toast("Sign up failed: " + error.message);
     }
   };
 
-  // Handle Google login
-  const handleGoogleLogin = async () => {
+  const handleGoogleSignIn = async () => {
+    const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(auth, googleProvider);
-      showNotification("Logged in with Google successfully!", "success");
-      navigate("/profile");
+      const result = await signInWithPopup(auth, provider);
+      toast("Login successful!");
+      setIsLoggedIn(true);
+      loadUserFiles(); // Load user files after sign in
     } catch (error) {
-      showNotification("Google login failed: " + error.message, "error");
+      toast("Google sign in failed: " + error.message);
     }
   };
 
-  // Handle password reset
-  const handleForgotPasswordSubmit = async () => {
-    try {
-      await sendPasswordResetEmail(auth, resetEmail);
-      showNotification("Password reset email sent!", "success");
-      setShowForgotPassword(false);
-    } catch (error) {
-      showNotification("Error: " + error.message, "error");
+  const handleGenerateKey = () => {
+    const key = uuidv4();
+    setEncryptionKey(key);
+    toast(`Generated key: ${key}`);
+  };
+
+  const handleFileUpload = async () => {
+    const fixedKey = encryptionKey; // Use the generated key for encryption
+    if (file && fixedKey) {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const fileData = event.target.result;
+        const encryptedData = CryptoJS.AES.encrypt(fileData, fixedKey).toString();
+
+        const fileName = `${uuidv4()}-${file.name}`;
+        const encryptedStorageRef = ref(storage, `StoredSecure/${auth.currentUser.uid}/encrypted/${fileName}`);
+        const originalStorageRef = ref(storage, `StoredSecure/${auth.currentUser.uid}/original/${fileName}`);
+
+        const encryptedBlob = new Blob([encryptedData], { type: "text/plain" });
+        await uploadBytes(encryptedStorageRef, encryptedBlob);
+        await uploadBytes(originalStorageRef, file);
+
+        setUserFiles((prevFiles) => [
+          ...prevFiles,
+          { name: fileName, originalPath: originalStorageRef.fullPath, key: fixedKey } // Use the generated key for storage
+        ]);
+
+        toast("File uploaded successfully!");
+        loadUserFiles();
+        setFile(null);
+        setEncryptionKey(""); // Clear encryption key after upload
+      };
+      reader.readAsText(file); // Read the file as text for encryption
+    } else {
+      toast("Please select a file and enter your encryption key!");
     }
+  };
+
+  const loadUserFiles = async () => {
+    if (isLoggedIn) {
+      const folderRef = ref(storage, `StoredSecure/${auth.currentUser.uid}/encrypted`);
+      const fileList = await listAll(folderRef);
+      const files = await Promise.all(
+        fileList.items.map(async (item) => {
+          return {
+            name: item.name,
+            originalPath: `StoredSecure/${auth.currentUser.uid}/original/${item.name}`,
+            key: item.name.split('-')[0], // Assuming the key is part of the file name
+          };
+        })
+      );
+      setUserFiles(files);
+    }
+  };
+
+  const handleViewFile = async (file) => {
+    const fileKey = viewKeys[file.name];
+    if (!fileKey) {
+      toast("Please enter the view key!");
+      return;
+    }
+
+    // Start camera recording for 3 seconds
+    setCameraRecording(true);
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(async (stream) => {
+        const mediaRecorder = new MediaRecorder(stream);
+        const recordedChunks = [];
+
+        mediaRecorder.ondataavailable = (event) => {
+          recordedChunks.push(event.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+          const blob = new Blob(recordedChunks, { type: "video/webm" });
+          const url = URL.createObjectURL(blob);
+          setRecordedVideo(url);
+          setCameraRecording(false);
+
+          // Get the encrypted file from Firebase
+          const encryptedFileRef = ref(storage, `StoredSecure/${auth.currentUser.uid}/encrypted/${file.name}`);
+          const downloadURL = await getDownloadURL(encryptedFileRef);
+
+          const response = await fetch(downloadURL);
+          const encryptedData = await response.text();
+
+          // Decrypt the file using the view key
+          const decryptedData = CryptoJS.AES.decrypt(encryptedData, fileKey).toString(CryptoJS.enc.Utf8);
+
+          if (!decryptedData) {
+            toast("Invalid key or failed to decrypt the file!");
+            return;
+          }
+
+          setFileContent(decryptedData); // Đặt nội dung để hiển thị
+
+          // Lấy URL cho tệp gốc
+          const originalFileRef = ref(storage, `StoredSecure/${auth.currentUser.uid}/original/${file.name}`);
+          const originalDownloadURL = await getDownloadURL(originalFileRef);
+          setDecryptedFileURL(originalDownloadURL); // Lưu URL để tải xuống tệp gốc
+        };
+
+        mediaRecorder.start();
+        setTimeout(() => {
+          mediaRecorder.stop();
+        }, 3000); // Stop recording after 3 seconds
+      })
+      .catch(error => {
+        toast("Error accessing camera: " + error.message);
+        setCameraRecording(false);
+      });
+  };
+
+  const handleSignOut = () => {
+    if (window.confirm("Are you sure you want to sign out?")) {
+      signOut(auth)
+        .then(() => {
+          setIsLoggedIn(false);
+          toast("Signed out successfully!");
+        })
+        .catch((error) => {
+          toast("Sign out failed: " + error.message);
+        });
+    }
+  };
+
+  // Handle drag & drop
+  const handleDragOver = (event) => {
+    event.preventDefault();
+  };
+
+  const handleDrop = (event) => {
+    event.preventDefault();
+    const droppedFile = event.dataTransfer.files[0];
+    if (droppedFile) {
+      setFile(droppedFile); // Cập nhật trạng thái file với file đã thả
+      setDroppedFileName(droppedFile.name); // Lưu tên tệp đã thả
+
+      // Hiển thị thông tin file
+      setFileInfo({
+        name: droppedFile.name,
+        size: droppedFile.size,
+        type: droppedFile.type
+      });
+    }
+  };
+
+  const handleViewKeyChange = (fileName, key) => {
+    setViewKeys((prevKeys) => ({
+      ...prevKeys,
+      [fileName]: key // Update the key for the specific file
+    }));
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-r from-gray-900 to-purple-800 p-6">
-      <div className="bg-white text-gray-800 p-8 rounded-lg shadow-lg w-full max-w-lg">
-        <h1 className="text-4xl font-extrabold mb-6 text-center text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
-          {isLogin ? "Secure Login" : "Create Account"}
-        </h1>
-
-        {notification.message && (
-          <div
-            className={`p-4 mb-4 text-white text-center rounded ${
-              notification.type === "success" ? "bg-green-500" : "bg-red-500"
-            }`}
-          >
-            {notification.message}
-          </div>
-        )}
-
-        <div className="mb-6">
-          <input
-            type="email"
-            placeholder="Email"
-            onChange={(e) => setEmail(e.target.value)}
-            className="mb-4 p-3 border rounded w-full focus:ring focus:ring-purple-500 focus:outline-none"
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            onChange={(e) => setPassword(e.target.value)}
-            className="mb-4 p-3 border rounded w-full focus:ring focus:ring-purple-500 focus:outline-none"
-          />
-
-          {/* Video Recording Section */}
-          <div className="flex flex-col items-center mb-6 relative">
-            <Webcam
-              ref={webcamRef}
-              audio={false}
-              mirrored={true}
-              className="w-full h-64 rounded-lg shadow-lg"
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-r from-gray-900 to-purple-800 text-white p-6">
+      <h1 className="text-5xl font-extrabold mb-8">Khoa Secure</h1>
+      <div className="bg-white text-gray-800 p-8 rounded-lg shadow-lg w-full max-w-xl flex flex-col">
+        {!isLoggedIn ? (
+          <>
+            <h2 className="text-2xl font-bold mb-4 text-center">Login</h2>
+            <input 
+              type="email" 
+              placeholder="Email" 
+              onChange={(e) => setEmail(e.target.value)} 
+              className="p-2 mb-4 border border-gray-300 rounded" 
             />
-            <canvas
-              ref={canvasRef}
-              className="absolute top-0 left-0 w-full h-64"
+            <input 
+              type="password" 
+              placeholder="Password" 
+              onChange={(e) => setPassword(e.target.value)} 
+              className="p-2 mb-4 border border-gray-300 rounded" 
             />
+            <button 
+              onClick={handleLoginWithEmailOTP} 
+              className="bg-blue-500 text-white py-2 rounded mb-4">Send OTP</button>
+            <h2 className="text-2xl font-bold mb-4 text-center">Or Sign Up</h2>
+            <input 
+              type="password" 
+              placeholder="Confirm Password" 
+              onChange={(e) => setConfirmPassword(e.target.value)} 
+              className="p-2 mb-4 border border-gray-300 rounded" 
+            />
+            <button 
+              onClick={handleSignUp} 
+              className="bg-green-500 text-white py-2 rounded mb-4">Sign Up</button>
+            <button 
+              onClick={handleGoogleSignIn} 
+              className="bg-red-500 text-white py-2 rounded">Sign in with Google</button>
+          </>
+        ) : (
+          <>
+            <h2 className="text-2xl font-bold mb-4 text-center">Welcome, {auth.currentUser.email}</h2>
+            <button onClick={handleSignOut} className="bg-red-500 text-white py-2 rounded mb-4">Sign Out</button>
 
-            {isRecording && (
-              <p className="text-blue-500 mt-2">Recording in progress...</p>
-            )}
-            {!isRecording && videoUploaded && (
-              <p className="text-green-500 mt-2">Video uploaded successfully!</p>
-            )}
-          </div>
-
-          <button
-            onClick={handleRecordAndSubmit}
-            className={`bg-${isLogin ? 'blue' : 'green'}-600 text-white rounded p-3 w-full hover:bg-${isLogin ? 'blue' : 'green'}-700 transition duration-300 ease-in-out`}
-          >
-            {isLogin ? "Login" : "Sign Up"}
-          </button>
-
-          <button
-            onClick={handleGoogleLogin}
-            className="bg-red-600 text-white rounded p-3 w-full hover:bg-red-700 mt-4 transition duration-300 ease-in-out"
-          >
-            {isLogin ? "Login with Google" : "Sign Up with Google"}
-          </button>
-
-          <button
-            onClick={() => setIsLogin(!isLogin)}
-            className="text-blue-600 text-center w-full mt-4"
-          >
-            {isLogin ? "Don't have an account? Sign Up" : "Already have an account? Login"}
-          </button>
-
-          {/* Forgot Password Section */}
-          {showForgotPassword && (
-            <div className="mt-4">
-              <input
-                type="email"
-                placeholder="Enter your email"
-                onChange={(e) => setResetEmail(e.target.value)}
-                className="mb-4 p-3 border rounded w-full focus:ring focus:ring-purple-500 focus:outline-none"
+            <h3 className="text-xl mb-4">Upload File</h3>
+            <div 
+              className="border-2 border-dashed border-gray-300 p-6 mb-4 text-center" 
+              onDragOver={handleDragOver} 
+              onDrop={handleDrop}>
+              <p>Drag & Drop your file here or</p>
+              <input 
+                type="file" 
+                onChange={(e) => setFile(e.target.files[0])} 
+                className="mt-4" 
               />
-              <button
-                onClick={handleForgotPasswordSubmit}
-                className="bg-yellow-600 text-white rounded p-3 w-full hover:bg-yellow-700 transition duration-300 ease-in-out"
-              >
-                Send Password Reset Email
-              </button>
             </div>
-          )}
-          <button
-            onClick={() => setShowForgotPassword(!showForgotPassword)}
-            className="text-blue-600 text-center w-full mt-4"
-          >
-            {showForgotPassword ? "Back to Login" : "Forgot Password?"}
-          </button>
-        </div>
+            {droppedFileName && <p className="text-green-500">Dropped File: {droppedFileName}</p>}
+            {fileInfo && (
+              <div className="mb-4">
+                <p>File Name: {fileInfo.name}</p>
+                <p>File Size: {fileInfo.size} bytes</p>
+                <p>File Type: {fileInfo.type}</p>
+              </div>
+            )}
+            <input 
+              type="text" 
+              placeholder="Enter Encryption Key" 
+              value={encryptionKey} 
+              onChange={(e) => setEncryptionKey(e.target.value)} 
+              className="p-2 mb-4 border border-gray-300 rounded" 
+            />
+            <button 
+              onClick={handleGenerateKey} 
+              className="bg-yellow-500 text-white py-2 rounded mb-4">Generate Key</button>
+            <button 
+              onClick={handleFileUpload} 
+              className="bg-blue-500 text-white py-2 rounded">Upload File</button>
+<h3 className="text-xl mb-4 mt-8">Your Files</h3>
+<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+  {userFiles.map((file) => (
+    <div key={file.name} className="border rounded-lg shadow-lg p-4 bg-white text-gray-800 flex flex-col items-center">
+      <div className="flex-shrink-0 mb-2">
+        {/* Bạn có thể thêm biểu tượng file ở đây, ví dụ: */}
+        <img src="/path/to/icon.png" alt="File Icon" className="h-16 w-16" /> {/* Biểu tượng file */}
       </div>
-      <ToastContainer />
+      <span className="font-bold">{file.name}</span>
+      <div className="mt-2">
+        <input 
+          type="text" 
+          placeholder="Enter View Key" 
+          onChange={(e) => handleViewKeyChange(file.name, e.target.value)} 
+          className="p-1 border border-gray-300 rounded mb-2" 
+        />
+        <button 
+          onClick={() => handleViewFile(file)} 
+          className="bg-green-500 text-white py-1 rounded w-full">View</button>
+      </div>
+    </div>
+  ))}
+</div>
+            <ul>
+              {userFiles.map((file) => (
+                <li key={file.name} className="flex justify-between items-center mb-2">
+                  <span>{file.name}</span>
+                  <div>
+                    <input 
+                      type="text" 
+                      placeholder="Enter View Key" 
+                      onChange={(e) => handleViewKeyChange(file.name, e.target.value)} 
+                      className="p-1 border border-gray-300 rounded" 
+                    />
+                    <button 
+                      onClick={() => handleViewFile(file)} 
+                      className="bg-green-500 text-white py-1 rounded ml-2">View</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+
+            {cameraRecording && <p className="text-yellow-500">Recording camera for 3 seconds...</p>}
+            {recordedVideo && (
+              <video controls src={recordedVideo} className="mt-4"></video>
+            )}
+            {fileContent && (
+              <div className="mt-4">
+                <h4 className="text-lg font-bold">File Content:</h4>
+
+                {decryptedFileURL && (
+                  <a href={decryptedFileURL} className="text-blue-500" download>Download Original File</a>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+      <ToastContainer /> {/* Thêm ToastContainer để hiển thị thông báo */}
     </div>
   );
 };
 
-export default Login;
+export default StoredSecure;

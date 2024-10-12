@@ -9,9 +9,9 @@ const DigitalSignature = () => {
   const [publicKey, setPublicKey] = useState("");
   const [signature, setSignature] = useState("");
 
-  const [verifyMessage, setVerifyMessage] = useState("");  // New state for verification message
-  const [verifyPublicKey, setVerifyPublicKey] = useState(""); // New state for verification public key
-  const [verifySignature, setVerifySignature] = useState(""); // New state for verification signature
+  const [verifyMessage, setVerifyMessage] = useState("");
+  const [verifyPublicKey, setVerifyPublicKey] = useState("");
+  const [verifySignature, setVerifySignature] = useState("");
 
   // Generate RSA key pair
   const generateRSAKeys = () => {
@@ -85,6 +85,17 @@ const DigitalSignature = () => {
     }
   };
 
+  // Copy to clipboard function
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text)
+      .then(() => {
+        toast.success("Copied to clipboard!");
+      })
+      .catch(() => {
+        toast.error("Failed to copy.");
+      });
+  };
+
   return (
     <div className="flex flex-col items-center justify-start p-6 bg-gray-50">
       <h1 className="text-5xl font-extrabold mb-8 text-gray-800">Digital Signature</h1>
@@ -104,14 +115,24 @@ const DigitalSignature = () => {
         {publicKey && (
           <div className="mt-6 w-full">
             <h3 className="text-xl mb-2">Public Key:</h3>
-            <textarea className="w-full h-32 bg-gray-900 text-white p-4 rounded" readOnly value={publicKey} />
+            <div className="flex">
+              <textarea className="w-full h-32 bg-gray-900 text-white p-4 rounded" readOnly value={publicKey} />
+              <button onClick={() => copyToClipboard(publicKey)} className="ml-2 p-3 bg-green-600 hover:bg-green-700 text-white rounded">
+                Copy
+              </button>
+            </div>
           </div>
         )}
 
         {privateKey && (
           <div className="mt-6 w-full">
             <h3 className="text-xl mb-2">Private Key:</h3>
-            <textarea className="w-full h-32 bg-gray-900 text-white p-4 rounded" readOnly value={privateKey} />
+            <div className="flex">
+              <textarea className="w-full h-32 bg-gray-900 text-white p-4 rounded" readOnly value={privateKey} />
+              <button onClick={() => copyToClipboard(privateKey)} className="ml-2 p-3 bg-green-600 hover:bg-green-700 text-white rounded">
+                Copy
+              </button>
+            </div>
           </div>
         )}
 
@@ -122,7 +143,12 @@ const DigitalSignature = () => {
         {signature && (
           <div className="mt-6 w-full">
             <h3 className="text-xl mb-2">Signature:</h3>
-            <textarea className="w-full h-32 bg-gray-900 text-white p-4 rounded" readOnly value={signature} />
+            <div className="flex">
+              <textarea className="w-full h-32 bg-gray-900 text-white p-4 rounded" readOnly value={signature} />
+              <button onClick={() => copyToClipboard(signature)} className="ml-2 p-3 bg-green-600 hover:bg-green-700 text-white rounded">
+                Copy
+              </button>
+            </div>
           </div>
         )}
 

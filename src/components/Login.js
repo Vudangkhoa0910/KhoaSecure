@@ -114,10 +114,10 @@ const detect = (video, faceCascade) => {
       ctx.strokeStyle = "green";
       ctx.stroke();
 
-      // // Vẽ tên "Khoa" phía trên hình chữ nhật
-      // ctx.fillStyle = "blue"; // Màu sắc chữ
-      // ctx.font = "25px Arial"; // Phong chữ
-      // ctx.fillText("Khoa", face.x, face.y > 10 ? face.y - 5 : 10); // Vẽ tên
+      // Vẽ tên "Khoa" phía trên hình chữ nhật
+      ctx.fillStyle = "blue"; // Màu sắc chữ
+      ctx.font = "25px Arial"; // Phong chữ
+      ctx.fillText("Khoa", face.x, face.y > 10 ? face.y - 5 : 10); // Vẽ tên
     }
 
     src.delete();

@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Route, Routes, Link, Navigate } from "react-ro
 import { FaHome, FaFolder, FaTrash, FaUserShield, FaFileAlt, FaSignal, FaBars, FaChevronLeft, FaNetworkWired } from "react-icons/fa";
 import axios from 'axios'; // Import axios for IP fetching
 import Home from './components/Home';
-import StoredSecure from './components/StoredSecure';
+import Trash from './components/Trash';
 import FileManager from './components/FileManager';
 import Profile from './components/Profile';
 import DigitalSignature from './components/DigitalSignature';
@@ -147,7 +147,7 @@ const App = () => {
               <h2 className="text-2xl font-bold">Khoa Secure</h2>
             </div>
 
-            <ul className="space-y-6">
+            <ul className="space-y-4">
               <li>
                 <Link to="/" className="flex items-center text-gray-300 hover:bg-gray-700 p-3 rounded">
                   <FaHome className="mr-3" /> Home
@@ -234,7 +234,7 @@ const App = () => {
             <Route path="/file-manager" element={user ? <FileManager /> : <Navigate to="/login" />}/>
             <Route path="/profile" element={user ? <Profile /> : <Navigate to="/login" />} />
             <Route path="/digital-signature" element={<DigitalSignature />} />
-            <Route path="/deleted" element={user ? <StoredSecure /> : <Navigate to="/login" />} />
+            <Route path="/deleted" element={user ? <Trash /> : <Navigate to="/login" />} />
             <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
           </Routes>
         </div>

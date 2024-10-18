@@ -292,29 +292,8 @@ const StoredSecure = () => {
             <button 
               onClick={handleFileUpload} 
               className="bg-blue-500 text-white py-2 rounded">Upload File</button>
-<h3 className="text-xl mb-4 mt-8">Your Files</h3>
-<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-  {userFiles.map((file) => (
-    <div key={file.name} className="border rounded-lg shadow-lg p-4 bg-white text-gray-800 flex flex-col items-center">
-      <div className="flex-shrink-0 mb-2">
-        {/* Bạn có thể thêm biểu tượng file ở đây, ví dụ: */}
-        <img src="/path/to/icon.png" alt="File Icon" className="h-16 w-16" /> {/* Biểu tượng file */}
-      </div>
-      <span className="font-bold">{file.name}</span>
-      <div className="mt-2">
-        <input 
-          type="text" 
-          placeholder="Enter View Key" 
-          onChange={(e) => handleViewKeyChange(file.name, e.target.value)} 
-          className="p-1 border border-gray-300 rounded mb-2" 
-        />
-        <button 
-          onClick={() => handleViewFile(file)} 
-          className="bg-green-500 text-white py-1 rounded w-full">View</button>
-      </div>
-    </div>
-  ))}
-</div>
+
+            <h3 className="text-xl mb-4 mt-8">Your Files</h3>
             <ul>
               {userFiles.map((file) => (
                 <li key={file.name} className="flex justify-between items-center mb-2">
